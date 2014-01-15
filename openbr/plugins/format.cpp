@@ -639,7 +639,7 @@ BR_REGISTER(Format, webcamFormat)
 class xmlFormat : public Format
 {
     Q_OBJECT
-
+;
     Template read() const
     {
         Template t;
@@ -647,41 +647,33 @@ class xmlFormat : public Format
 #ifndef BR_EMBEDDED
         QString fileName = file.get<QString>("path") + file.name;
 
-        QDomDocument doc(fileName);
         QFile f(fileName);
 
         if (!f.open(QIODevice::ReadOnly)) qFatal("Unable to open %s for reading.", qPrintable(file.flat()));
-        if (!doc.setContent(&f)) qWarning("Unable to parse %s.", qPrintable(file.flat()));
-        f.close();
+        QXmlStreamReader xml(&f);
 
-        QDomElement docElem = doc.documentElement();
-        QDomNode subject = docElem.firstChild();
-        while (!subject.isNull()) {
-            QDomNode fileNode = subject.firstChild();
+        while (!xml.atEnd() && !xml.hasError()) {
+            QXmlStreamReader::TokenType token = xml.readNext();
+            if(token == QXmlStreamReader::StartDocument)
+                continue;
 
-            while (!fileNode.isNull()) {
-                QDomElement e = fileNode.toElement();
-
-                if (e.tagName() == "FORMAL_IMG") {
-                    QByteArray byteArray = QByteArray::fromBase64(qPrintable(e.text()));
+            if  (token == QXmlStreamReader::StartElement) {
+                if (xml.name() == "FORMAL_IMG") {
+                    QByteArray byteArray = QByteArray::fromBase64(qPrintable(xml.text().toString()));
                     Mat m = imdecode(Mat(3, byteArray.size(), CV_8UC3, byteArray.data()), CV_LOAD_IMAGE_COLOR);
                     if (!m.data) qWarning("xmlFormat::read failed to decode image data.");
                     t.append(m);
-                } else if ((e.tagName() == "RELEASE_IMG") ||
-                           (e.tagName() == "PREBOOK_IMG") ||
-                           (e.tagName() == "LPROFILE") ||
-                           (e.tagName() == "RPROFILE")) {
+                } else if ((xml.name() == "RELEASE_IMG") ||
+                           (xml.name() == "PREBOOK_IMG") ||
+                           (xml.name() == "LPROFILE") ||
+                           (xml.name() == "RPROFILE")) {
                     // Ignore these other image fields for now
                 } else {
-                    t.file.set(e.tagName(), e.text());
+                    t.file.set(xml.name().toString(), xml.text().toString());
                 }
-
-                fileNode = fileNode.nextSibling();
             }
-            subject = subject.nextSibling();
         }
 
-        // Calculate age
         if (t.file.contains("DOB")) {
             const QDate dob = QDate::fromString(t.file.get<QString>("DOB").left(10), "yyyy-MM-dd");
             const QDate current = QDate::currentDate();
@@ -689,6 +681,9 @@ class xmlFormat : public Format
             if (current.month() < dob.month()) age--;
             t.file.set("Age", age);
         }
+
+        f.close();
+
 #endif // BR_EMBEDDED
 
         return t;
