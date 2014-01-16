@@ -659,6 +659,7 @@ class xmlFormat : public Format
 
             if  (token == QXmlStreamReader::StartElement) {
                 if (xml.name() == "FORMAL_IMG") {
+                    xml.readNext();
                     QByteArray byteArray = QByteArray::fromBase64(qPrintable(xml.text().toString()));
                     Mat m = imdecode(Mat(3, byteArray.size(), CV_8UC3, byteArray.data()), CV_LOAD_IMAGE_COLOR);
                     if (!m.data) qWarning("xmlFormat::read failed to decode image data.");
@@ -669,7 +670,10 @@ class xmlFormat : public Format
                            (xml.name() == "RPROFILE")) {
                     // Ignore these other image fields for now
                 } else {
-                    t.file.set(xml.name().toString(), xml.text().toString());
+                    QString name = xml.name().toString();
+                    xml.readNext();
+                    if (!xml.isWhitespace())
+                        t.file.set(name, xml.text().toString());
                 }
             }
         }
